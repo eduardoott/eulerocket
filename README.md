@@ -5,6 +5,16 @@ the stars. While Claude works the stars streak into warp, the rocket recedes int
 its blue flame stretches; when a turn finishes, the ship glows. Prefer a space shuttle?
 `/eulerocket ship shuttle` swaps it in. It runs in the terminal and in the desktop app, and costs zero tokens.
 
+## Ships
+
+![The five ships, top to bottom: classic rocket, space shuttle, retro rocket, staged rocket, starship](docs/img/all-ships.png)
+
+The five ships you can pick with `/eulerocket ship <kind>`.
+
+![The band while Claude works](docs/img/working.png)
+
+While Claude works the stars warp and the ship recedes; both are adjustable with `recede` and `blur`.
+
 ## Install
 
 ```
@@ -35,6 +45,12 @@ closes it. Every menu choice is also a command:
 | `/eulerocket blur <0\|25\|50\|75\|100>` | how soft the ship gets when it shrinks: 100 smooth (default), 0 crisp pixels |
 | `/eulerocket ship <kind>` | which ship flies: `rocket` (classic rocket marked EULER), `shuttle` (space shuttle), `retro` (1950s retro rocket), `staged` (multi-stage rocket with escape tower) or `scifi` (starship with blinking lights, default); the large detailed versions show when the band is 8 rows or more |
 | `/eulerocket demo <working\|done\|error\|intro>` | play an effect |
+
+## Development
+
+- `bun tools/preview.ts` regenerates the images in `docs/img/`.
+- `bun tests/menu.test.ts` runs the menu tests.
+- `bash tools/validate.sh` validates the plugin.
 
 ## Credits
 

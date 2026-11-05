@@ -269,7 +269,10 @@ const GLOW: Rgb = [210, 225, 255], WHITE: Rgb = [255, 255, 255]
  */
 function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind: ShipKind = 'rocket', recede = 0.3, blur = 1) {
   const { w, h } = c
-  const ship = drawShip(kind, shipTier(h), t)
+  // in a narrow band a big ship would lose its tail off the left edge; within 75% of the width the
+  // idle flame (about 11 px) still shows behind it, and every large ship fits that from 71 columns up
+  let ship = drawShip(kind, shipTier(h), t)
+  if (shipTier(h) === 'large' && ship.w > w * 0.75) ship = drawShip(kind, 'medium', t)
   const { hullTop: top, hullBot: bot } = ship
   const mid = (top + bot) / 2, hf = (bot - top) / 2
   const cy = Math.round(h * 0.5 + Math.sin(t / 900) * 0.6 + (warp > 0.5 ? Math.sin(t / 37) * 0.4 : 0))
