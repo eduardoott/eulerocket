@@ -1,6 +1,7 @@
 /**
  * eulerocket: a rocket marked EULER flying through the stars above the Claude Code prompt. While
- * Claude works the stars streak into warp and the flame stretches; a finished turn flashes.
+ * Claude works the stars streak into warp, the rocket recedes and its flame stretches; a finished
+ * turn makes the ship glow.
  *
  *   /eulerocket                       status and the list of commands
  *   /eulerocket on | off              show or hide it
@@ -10,6 +11,7 @@
  *   /eulerocket pixels <standard|fine>     fine: four pixels per character, for tight line spacing
  *   /eulerocket colormode <auto|full|256>  256 for terminals without true colour
  *   /eulerocket animate <on|off>      hold the scene still
+ *   /eulerocket ship <rocket|shuttle> which ship flies
  *   /eulerocket demo <working|done|error|intro>
  *
  * The band is one Raster element under `ui.render` for `AbovePrompt`; a clock timer builds each
@@ -22,7 +24,7 @@ import type { Art } from './art'
 import { DURATION, FRAME_MS, frame, isOneShot, type Mood } from './effects'
 import { to256 } from './palette256'
 import { cellsFor, quadCellsFor } from './raster'
-import { eulerocket, type Renderer } from './rocket'
+import { eulerocket, type Renderer, type ShipKind } from './rocket'
 import { svgWithin } from './svg'
 
 type Shown = 'slim' | 'full' | 'hide'
@@ -30,11 +32,11 @@ type ColorMode = 'auto' | 'full' | '256'
 /** standard: two pixels per cell (half blocks). fine: four (quadrants), for nearly square cells. */
 type Pixels = 'standard' | 'fine'
 /** `rows` 0 means auto: about a quarter of the terminal. */
-interface Config { rows: number; enabled: boolean; animate: boolean; whileWorking: Shown; whileIdle: Shown; colorMode: ColorMode
+interface Config { rows: number; enabled: boolean; animate: boolean; whileWorking: Shown; whileIdle: Shown; colorMode: ColorMode; ship: ShipKind
   /** Pixels per character, per terminal app: the right choice depends on that terminal's font. */
   pixelsFor: Record<string, Pixels> }
 
-const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', pixelsFor: {} }
+const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'rocket', pixelsFor: {} }
 const NAME = 'eulerocket'
 /** How tall the band gets while Claude works, in 'slim' mode: out of the way, still animating. */
 const SLIM_ROWS = 4
@@ -104,14 +106,14 @@ export const register: Register = (on) => {
     if (!band) return null
     const w = pixelCols(band.columns, pixelsNow()), h = band.rows * 2
     const fullH = Math.max(h, fullRows() * 2)
-    const rkey = `${w}x${fullH}`
-    if (!renderer || rendererKey !== rkey) { renderer = eulerocket(w, fullH); rendererKey = rkey }
+    const rkey = `${w}x${fullH}:${config.ship}`
+    if (!renderer || rendererKey !== rkey) { renderer = eulerocket(w, fullH, config.ship); rendererKey = rkey }
     const flash = mood === 'done' ? ticks * FRAME_MS : null
     const whole = renderer({ t: sceneT, energy, flash })
     const top = Math.max(0, Math.round((fullH - h) / 2))
     const px = top === 0 && h === fullH ? whole : whole.slice(top * w, (top + h) * w)
     const a: Art = { w, h, px }
-    // The scene shows working and done itself (warp, flash); intro and error play over it.
+    // The scene shows working and done itself (warp, ship glow); intro and error play over it.
     const m = mood === 'working' || mood === 'done' ? 'idle' : mood
     return { a, px: frame(a, m, ticks * FRAME_MS) }
   }
@@ -189,12 +191,14 @@ export const register: Register = (on) => {
     terminal = program || 'unknown'
     const c = (await $.store.get('config')) as Partial<Config> | undefined
     config = { ...DEFAULTS, ...(c ?? {}) }
+    // a stored ship this version doesn't draw would leave the renderer with no sprite
+    if (!['rocket', 'shuttle'].includes(config.ship)) config.ship = DEFAULTS.ship
     redraw()
     setMood('intro')
     await $.command.register({
       name: NAME,
-      description: 'The EULER rocket above your prompt: on, off, size, working, idle, pixels, colormode, animate, demo',
-      argumentHint: '[on | off | size <rows|auto> | working <slim|full|hide> | idle <full|slim|hide> | demo <mood>]',
+      description: 'The EULER rocket above your prompt: on, off, size, working, idle, pixels, colormode, animate, ship, demo',
+      argumentHint: '[on | off | size <rows|auto> | working <slim|full|hide> | idle <full|slim|hide> | ship <rocket|shuttle> | demo <mood>]',
     })
     return next(e)
   })
@@ -213,7 +217,7 @@ export const register: Register = (on) => {
     return next(e)
   })
 
-  // With the Boxis mod installed, marking a box as understood bumps its "celebrate" state: play the flash.
+  // With the Boxis mod installed, marking a box as understood bumps its "celebrate" state: play the ship glow.
   on('state.set', async ($, e: any, next) => {
     const r = await next(e)
     if (e?.plugin === 'boxis' && e?.key === 'celebrate') setMood('done')
@@ -289,6 +293,10 @@ export const register: Register = (on) => {
         if (!['on', 'off'].includes(arg)) return reply(`Usage: /${NAME} animate on|off`)
         config.animate = arg === 'on'; await save()
         return reply(config.animate ? 'moving.' : 'holding still.')
+      case 'ship':
+        if (!['rocket', 'shuttle'].includes(arg)) return reply(`Usage: /${NAME} ship rocket|shuttle`)
+        config.ship = arg as ShipKind; await save()
+        return reply(`the ${arg} flies.`)
       case 'demo': {
         if (!['working', 'done', 'error', 'intro'].includes(arg)) return reply(`Usage: /${NAME} demo working|done|error|intro`)
         // A demo "working" has no turn to end it, so stop it after a few seconds.
@@ -300,8 +308,8 @@ export const register: Register = (on) => {
       case '':
       case 'status':
       case 'help': {
-        const status = `${LABEL}: ${config.enabled ? 'on' : 'off'}, ${config.rows ? `${config.rows} rows` : 'auto height'}, working ${config.whileWorking}, idle ${config.whileIdle}${use256() ? ', 256 colours' : ''}`
-        return reply(`${status}.\n/${NAME} on · off · size <rows|auto> · working <slim|full|hide> · idle <full|slim|hide> · pixels <standard|fine> · colormode <auto|full|256> · animate <on|off> · demo <working|done|error|intro>`)
+        const status = `${LABEL}: ${config.enabled ? 'on' : 'off'}, ${config.rows ? `${config.rows} rows` : 'auto height'}, working ${config.whileWorking}, idle ${config.whileIdle}, ship ${config.ship}${use256() ? ', 256 colours' : ''}`
+        return reply(`${status}.\n/${NAME} on · off · size <rows|auto> · working <slim|full|hide> · idle <full|slim|hide> · pixels <standard|fine> · colormode <auto|full|256> · animate <on|off> · ship <rocket|shuttle> · demo <working|done|error|intro>`)
       }
       default:
         return reply(`unknown command "${sub}". /${NAME} help lists them.`)
