@@ -36,7 +36,7 @@ function noise(x: number, y: number, seed: number): number {
 /** A finished-turn pulse: 1 right at the finish, fading to 0 over FLASH_MS. */
 const pulse = (flash: number | null) => (flash === null || flash >= FLASH_MS ? 0 : (1 - flash / FLASH_MS) ** 2)
 
-export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket', recede = 0.3): Renderer {
+export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket', recede = 0.3, blur = 1): Renderer {
   const layers = [
     { density: 0.03, speed: 1.2, bright: 0.45 },
     { density: 0.014, speed: 3.5, bright: 0.75 },
@@ -84,7 +84,7 @@ export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket', rece
         for (let k = 0; k < 5; k++) c.mix(Math.floor(sx - k), Math.floor(sy - k * 0.5), [255, 255, 255], 0.9 - k * 0.18)
       }
     }
-    rocket(c, t, warp, pulse(flash), zoom, kind, recede)
+    rocket(c, t, warp, pulse(flash), zoom, kind, recede, blur)
     return c.pack()
   }
 }
@@ -213,9 +213,10 @@ interface Zoom { width: number }
 /**
  * Draw `ship` scaled by `s` with its left edge at column `x0` and its top edge at row `y0` (may be
  * fractional). Each scene pixel takes the alpha-weighted average of the sprite area it covers, so
- * a shrunken ship softens at the edges instead of flickering. Coverage per pixel goes into `cov`.
+ * a shrunken ship softens at the edges instead of flickering. `blur` (0..1) mixes that average with
+ * the crisp nearest sprite pixel: 1 is fully averaged, 0 fully crisp. Coverage goes into `cov`.
  */
-function composite(c: Canvas, ship: Ship, x0: number, y0: number, s: number, cov: Float32Array) {
+function composite(c: Canvas, ship: Ship, x0: number, y0: number, s: number, cov: Float32Array, blur = 1) {
   const spans = (from: number, n: number, size: number) => {
     const out: { at: number; src: number[]; wt: number[] }[] = []
     for (let d = Math.floor(from); d < Math.ceil(from + n * s); d++) {
@@ -244,7 +245,15 @@ function composite(c: Canvas, ship: Ship, x0: number, y0: number, s: number, cov
         }
       }
       if (a <= 0) continue
-      const col: Rgb = [r / a, g / a, b / a]
+      let col: Rgb = [r / a, g / a, b / a]
+      if (blur < 1) {
+        const sx = Math.floor((X.at + 0.5 - x0) / s), sy = Math.floor((Y.at + 0.5 - y0) / s)
+        const p = sx >= 0 && sy >= 0 && sx < ship.w && sy < ship.h ? sy * ship.w + sx : -1
+        const na = p >= 0 ? ship.alpha[p] : 0
+        if (na > 0) col = lerp([ship.px[p * 3], ship.px[p * 3 + 1], ship.px[p * 3 + 2]], col, blur)
+        a = na + (Math.min(1, a) - na) * blur
+        if (a <= 0) continue
+      }
       if (a >= 1 - 1e-6) { a = 1; c.set(X.at, Y.at, col) } else c.mix(X.at, Y.at, col, a)
       cov[Y.at * c.w + X.at] = a
     }
@@ -258,7 +267,7 @@ const GLOW: Rgb = [210, 225, 255], WHITE: Rgb = [255, 255, 255]
  * a fraction of its size) and its blue flame stretches; a finish makes the ship glow and adds a burst to the
  * flame. Tall bands get the lettering.
  */
-function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind: ShipKind = 'rocket', recede = 0.3) {
+function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind: ShipKind = 'rocket', recede = 0.3, blur = 1) {
   const { w, h } = c
   const ship = drawShip(kind, shipTier(h), t)
   const { hullTop: top, hullBot: bot } = ship
@@ -312,7 +321,7 @@ function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind:
     }
   }
   const cov = new Float32Array(w * h)
-  composite(c, ship, x0, y0, s, cov)
+  composite(c, ship, x0, y0, s, cov, blur)
   if (f > 0) glow(c, cov, t, f, x0, Math.floor(y0), zoom.width, Math.ceil(y0 + ship.h * s))
 }
 

@@ -31,6 +31,7 @@ closes it. Every menu choice is also a command:
 | `/eulerocket colormode <auto\|full\|256>` | 256 for terminals without true colour |
 | `/eulerocket animate <on\|off>` | hold the scene still |
 | `/eulerocket recede <0\|30\|45\|60\|75>` | how far the ship recedes while Claude works, in percent of its size (default 30; 0 turns it off) |
+| `/eulerocket blur <0\|25\|50\|75\|100>` | how soft the ship gets when it shrinks: 100 smooth (default), 0 crisp pixels |
 | `/eulerocket ship <kind>` | which ship flies: `rocket` (classic rocket marked EULER), `shuttle` (space shuttle), `retro` (1950s retro rocket), `staged` (multi-stage rocket with escape tower) or `scifi` (starship with blinking lights, default); the large detailed versions show when the band is 8 rows or more |
 | `/eulerocket demo <working\|done\|error\|intro>` | play an effect |
 
