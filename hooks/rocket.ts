@@ -36,7 +36,7 @@ function noise(x: number, y: number, seed: number): number {
 /** A finished-turn pulse: 1 right at the finish, fading to 0 over FLASH_MS. */
 const pulse = (flash: number | null) => (flash === null || flash >= FLASH_MS ? 0 : (1 - flash / FLASH_MS) ** 2)
 
-export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket', recede = 0.3, blur = 1): Renderer {
+export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket', recede = 0.3, flame = 1): Renderer {
   const layers = [
     { density: 0.03, speed: 1.2, bright: 0.45 },
     { density: 0.014, speed: 3.5, bright: 0.75 },
@@ -84,7 +84,7 @@ export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket', rece
         for (let k = 0; k < 5; k++) c.mix(Math.floor(sx - k), Math.floor(sy - k * 0.5), [255, 255, 255], 0.9 - k * 0.18)
       }
     }
-    rocket(c, t, warp, pulse(flash), zoom, kind, recede, blur)
+    rocket(c, t, warp, pulse(flash), zoom, kind, recede, flame)
     return c.pack()
   }
 }
@@ -212,50 +212,21 @@ interface Zoom { width: number }
 
 /**
  * Draw `ship` scaled by `s` with its left edge at column `x0` and its top edge at row `y0` (may be
- * fractional). Each scene pixel takes the alpha-weighted average of the sprite area it covers, so
- * a shrunken ship softens at the edges instead of flickering. `blur` (0..1) mixes that average with
- * the crisp nearest sprite pixel: 1 is fully averaged, 0 fully crisp. Coverage goes into `cov`.
+ * fractional). Each scene pixel takes the nearest sprite pixel, so a shrunken ship stays crisp.
+ * Coverage goes into `cov`.
  */
-function composite(c: Canvas, ship: Ship, x0: number, y0: number, s: number, cov: Float32Array, blur = 1) {
-  const spans = (from: number, n: number, size: number) => {
-    const out: { at: number; src: number[]; wt: number[] }[] = []
-    for (let d = Math.floor(from); d < Math.ceil(from + n * s); d++) {
-      const a = (d - from) / s, b = (d + 1 - from) / s
-      const src: number[] = [], wt: number[] = []
-      for (let i = Math.max(0, Math.floor(a)); i < Math.min(size, Math.ceil(b)); i++) {
-        const o = Math.min(b, i + 1) - Math.max(a, i)
-        if (o > 0) { src.push(i); wt.push(o * s) }
-      }
-      out.push({ at: d, src, wt })
-    }
-    return out
-  }
-  const xs = spans(x0, ship.w, ship.w), ys = spans(y0, ship.h, ship.h)
-  for (const Y of ys) {
-    if (Y.at < 0 || Y.at >= c.h) continue
-    for (const X of xs) {
-      if (X.at < 0 || X.at >= c.w) continue
-      let a = 0, r = 0, g = 0, b = 0
-      for (let j = 0; j < Y.src.length; j++) {
-        for (let i = 0; i < X.src.length; i++) {
-          const p = Y.src[j] * ship.w + X.src[i]
-          const k = Y.wt[j] * X.wt[i] * ship.alpha[p]
-          if (k <= 0) continue
-          a += k; r += k * ship.px[p * 3]; g += k * ship.px[p * 3 + 1]; b += k * ship.px[p * 3 + 2]
-        }
-      }
+function composite(c: Canvas, ship: Ship, x0: number, y0: number, s: number, cov: Float32Array) {
+  for (let Y = Math.max(0, Math.floor(y0)); Y < Math.min(c.h, Math.ceil(y0 + ship.h * s)); Y++) {
+    const sy = Math.floor((Y + 0.5 - y0) / s)
+    if (sy < 0 || sy >= ship.h) continue
+    for (let X = Math.max(0, Math.floor(x0)); X < Math.min(c.w, Math.ceil(x0 + ship.w * s)); X++) {
+      const sx = Math.floor((X + 0.5 - x0) / s)
+      if (sx < 0 || sx >= ship.w) continue
+      const p = sy * ship.w + sx, a = ship.alpha[p]
       if (a <= 0) continue
-      let col: Rgb = [r / a, g / a, b / a]
-      if (blur < 1) {
-        const sx = Math.floor((X.at + 0.5 - x0) / s), sy = Math.floor((Y.at + 0.5 - y0) / s)
-        const p = sx >= 0 && sy >= 0 && sx < ship.w && sy < ship.h ? sy * ship.w + sx : -1
-        const na = p >= 0 ? ship.alpha[p] : 0
-        if (na > 0) col = lerp([ship.px[p * 3], ship.px[p * 3 + 1], ship.px[p * 3 + 2]], col, blur)
-        a = na + (Math.min(1, a) - na) * blur
-        if (a <= 0) continue
-      }
-      if (a >= 1 - 1e-6) { a = 1; c.set(X.at, Y.at, col) } else c.mix(X.at, Y.at, col, a)
-      cov[Y.at * c.w + X.at] = a
+      const col: Rgb = [ship.px[p * 3], ship.px[p * 3 + 1], ship.px[p * 3 + 2]]
+      if (a >= 1 - 1e-6) c.set(X, Y, col); else c.mix(X, Y, col, a)
+      cov[Y * c.w + X] = Math.min(1, a)
     }
   }
 }
@@ -264,10 +235,10 @@ const GLOW: Rgb = [210, 225, 255], WHITE: Rgb = [255, 255, 255]
 
 /**
  * A ship flying right, a little past the middle. While working it edges forward, recedes (by `recede`,
- * a fraction of its size) and its blue flame stretches; a finish makes the ship glow and adds a burst to the
+ * a fraction of its size) and its blue flame stretches (scaled by `flame`); a finish makes the ship glow and adds a burst to the
  * flame. Tall bands get the lettering.
  */
-function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind: ShipKind = 'rocket', recede = 0.3, blur = 1) {
+function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind: ShipKind = 'rocket', recede = 0.3, flame = 1) {
   const { w, h } = c
   // in a narrow band a big ship would lose its tail off the left edge; within 75% of the width the
   // idle flame (about 11 px) still shows behind it, and every large ship fits that from 71 columns up
@@ -290,7 +261,7 @@ function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind:
   const hs = hf * s
   // flame: wide and bright at the nozzle, thinning to a point, then one thin line of exhaust that
   // runs back to the band's edge; it stretches with warp and bursts on a finish
-  const len = 6 + hf * 2 + warp * (14 + hf * 4) + f * 12 + Math.sin(t / 60) * 1.2 + hash(Math.floor(t / 80), 0, 911) * 1.5
+  const len = 6 + hf * 2 + warp * (14 + hf * 4) * flame + f * 12 + Math.sin(t / 60) * 1.2 + hash(Math.floor(t / 80), 0, 911) * 1.5
   const line = Math.round(yc)
   for (let x = tail - Math.round(len); x >= 0; x--) {
     const u = (tail - len - x) / Math.max(1, tail - len)
@@ -324,7 +295,7 @@ function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind:
     }
   }
   const cov = new Float32Array(w * h)
-  composite(c, ship, x0, y0, s, cov, blur)
+  composite(c, ship, x0, y0, s, cov)
   if (f > 0) glow(c, cov, t, f, x0, Math.floor(y0), zoom.width, Math.ceil(y0 + ship.h * s))
 }
 

@@ -6,7 +6,7 @@ import { mkdirSync, writeFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { eulerocket, SHIP_KINDS, type ShipKind } from '../hooks/rocket'
 
-const W = 160, H = 32, SCALE = 4, RECEDE = 0.6, BLUR = 0.25
+const W = 160, H = 32, SCALE = 4, RECEDE = 0.6
 const OUT = join(import.meta.dir, '..', 'docs', 'img')
 
 const CRC_TABLE = (() => {
@@ -68,7 +68,7 @@ function encodePng(px: Uint32Array, w: number, h: number, scale = 1): Uint8Array
 }
 
 function idle(kind: ShipKind): Uint32Array {
-  return eulerocket(W, H, kind, RECEDE, BLUR)({ t: 1000, energy: 0, flash: null })
+  return eulerocket(W, H, kind, RECEDE)({ t: 1000, energy: 0, flash: null })
 }
 
 function save(name: string, px: Uint32Array, w: number, h: number) {
@@ -87,7 +87,7 @@ SHIP_KINDS.forEach((kind, i) => {
 })
 save('all-ships.png', all, W, H * SHIP_KINDS.length)
 
-const work = eulerocket(W, H, 'scifi', RECEDE, BLUR)
+const work = eulerocket(W, H, 'scifi', RECEDE)
 let frame = new Uint32Array(0)
 for (let i = 0; i < 250; i++) frame = work({ t: 1000 + i * 33, energy: 1, flash: null })
 save('working.png', frame, W, H)

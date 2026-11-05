@@ -36,19 +36,19 @@ type Pixels = 'standard' | 'fine'
 interface Config { rows: number; enabled: boolean; animate: boolean; whileWorking: Shown; whileIdle: Shown; colorMode: ColorMode; ship: ShipKind
   /** How far the ship recedes while working, in percent of its size. */
   recede: number
-  /** How soft the shrunken ship gets, in percent: 100 fully averaged, 0 crisp pixels. */
-  blur: number
+  /** How long the working flame stretches, in percent of the standard length. */
+  flame: number
   /** How tall the band gets in 'slim' mode, in rows: out of the way, still animating. */
   slimRows: number
   /** Pixels per character, per terminal app: the right choice depends on that terminal's font. */
   pixelsFor: Record<string, Pixels> }
 
-const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'scifi', recede: 60, blur: 25, slimRows: 4, pixelsFor: {} }
+const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'scifi', recede: 60, flame: 100, slimRows: 4, pixelsFor: {} }
 const NAME = 'eulerocket'
 /** Menu choices for how far the ship recedes while working, in percent. */
 const RECEDES = [0, 30, 45, 60, 75]
-/** Menu choices for how soft the shrunken ship gets, in percent. */
-const BLURS = [0, 25, 50, 75, 100]
+/** Menu choices for the working flame length, in percent of the standard. */
+const FLAMES = [0, 50, 100, 150, 200, 300]
 const MENU = 'eulerocket'
 const SHIPS_TEXT = SHIP_KINDS.join('|')
 const SIZE_CHOICES = ['auto', '4', '6', '8', '10', '12', '14', '16']
@@ -127,8 +127,8 @@ export const register: Register = (on) => {
     if (!band) return null
     const w = pixelCols(band.columns, pixelsNow()), h = band.rows * 2
     const fullH = Math.max(h, fullRows() * 2)
-    const rkey = `${w}x${fullH}:${config.ship}:${config.recede}:${config.blur}`
-    if (!renderer || rendererKey !== rkey) { renderer = eulerocket(w, fullH, config.ship, config.recede / 100, config.blur / 100); rendererKey = rkey }
+    const rkey = `${w}x${fullH}:${config.ship}:${config.recede}:${config.flame}`
+    if (!renderer || rendererKey !== rkey) { renderer = eulerocket(w, fullH, config.ship, config.recede / 100, config.flame / 100); rendererKey = rkey }
     const flash = mood === 'done' ? ticks * FRAME_MS : null
     const whole = renderer({ t: sceneT, energy, flash })
     const top = Math.max(0, Math.round((fullH - h) / 2))
@@ -239,18 +239,18 @@ export const register: Register = (on) => {
     return config.animate ? 'moving.' : 'holding still.'
   }
 
+  async function setFlame(arg: string): Promise<string> {
+    const n = Number(arg)
+    if (!FLAMES.includes(n)) return `Usage: /${NAME} flame ${FLAMES.join('|')}`
+    config.flame = n; await save()
+    return n === 0 ? 'the flame stays at idle length while working.' : `the working flame stretches at ${n}%.`
+  }
+
   async function setRecede(arg: string): Promise<string> {
     const n = Number(arg)
     if (!RECEDES.includes(n)) return `Usage: /${NAME} recede ${RECEDES.join('|')}`
     config.recede = n; await save()
     return n === 0 ? 'the ship holds its size while working.' : `the ship recedes to ${100 - n}% while working.`
-  }
-
-  async function setBlur(arg: string): Promise<string> {
-    const n = Number(arg)
-    if (!BLURS.includes(n)) return `Usage: /${NAME} blur ${BLURS.join('|')}`
-    config.blur = n; await save()
-    return n === 0 ? 'the shrunken ship keeps crisp pixels.' : `the shrunken ship softens ${n}%.`
   }
 
   async function setShip(arg: string): Promise<string> {
@@ -261,7 +261,7 @@ export const register: Register = (on) => {
 
   function statusText(): string {
     const status = `${LABEL}: ${config.enabled ? 'on' : 'off'}, ${config.rows ? `${config.rows} rows` : 'auto height'}, working ${config.whileWorking}, idle ${config.whileIdle}, ship ${config.ship}${use256() ? ', 256 colours' : ''}`
-    return `${status}.\n/${NAME} opens the menu · on · off · size <rows|auto> · slim <rows> · working <slim|full|hide> · idle <full|slim|hide> · pixels <standard|fine> · colormode <auto|full|256> · animate <on|off> · recede <${RECEDES.join('|')}> · blur <${BLURS.join('|')}> · ship <${SHIPS_TEXT}> · demo <working|done|error|intro> · status · help`
+    return `${status}.\n/${NAME} opens the menu · on · off · size <rows|auto> · slim <rows> · working <slim|full|hide> · idle <full|slim|hide> · pixels <standard|fine> · colormode <auto|full|256> · animate <on|off> · recede <${RECEDES.join('|')}> · flame <${FLAMES.join('|')}> · ship <${SHIPS_TEXT}> · demo <working|done|error|intro> · status · help`
   }
 
   async function openMenu() {
@@ -305,14 +305,14 @@ export const register: Register = (on) => {
     // a stored ship this version doesn't draw would leave the renderer with no sprite
     if (!isShip(config.ship)) config.ship = DEFAULTS.ship
     if (!(config.recede >= 0 && config.recede <= 90)) config.recede = DEFAULTS.recede
-    if (!(config.blur >= 0 && config.blur <= 100)) config.blur = DEFAULTS.blur
+    if (!(config.flame >= 0 && config.flame <= 300)) config.flame = DEFAULTS.flame
     if (!(config.slimRows >= 1 && config.slimRows <= 12)) config.slimRows = DEFAULTS.slimRows
     redraw()
     setMood('intro')
     await $.command.register({
       name: NAME,
       description: 'The EULER rocket above your prompt: no argument opens a menu; or on, off, size, working, idle, pixels, colormode, animate, ship, demo, status, help',
-      argumentHint: `[on | off | size <rows|auto> | slim <rows> | working <slim|full|hide> | idle <full|slim|hide> | ship <${SHIPS_TEXT}> | recede <percent> | blur <percent> | demo <mood> | status | help]`,
+      argumentHint: `[on | off | size <rows|auto> | slim <rows> | working <slim|full|hide> | idle <full|slim|hide> | ship <${SHIPS_TEXT}> | recede <percent> | flame <percent> | demo <mood> | status | help]`,
     })
     return next(e)
   })
@@ -430,9 +430,9 @@ export const register: Register = (on) => {
         onSelect: (v: string) => act(() => setRecede(v))(),
       }),
       select({
-        key: 'blur', label: 'Blur          ', value: String(config.blur),
-        options: [...new Set([...BLURS, config.blur])].map((v) => ({ value: String(v), label: v === 0 ? 'crisp' : `${v}%` })),
-        onSelect: (v: string) => act(() => setBlur(v))(),
+        key: 'flame', label: 'Flame         ', value: String(config.flame),
+        options: [...new Set([...FLAMES, config.flame])].map((v) => ({ value: String(v), label: v === 0 ? 'idle only' : `${v}%` })),
+        onSelect: (v: string) => act(() => setFlame(v))(),
       }),
       select({
         key: 'animate', label: 'Animate       ', value: config.animate ? 'on' : 'off',
@@ -481,8 +481,8 @@ export const register: Register = (on) => {
         return reply(await setShip(arg))
       case 'recede':
         return reply(await setRecede(arg))
-      case 'blur':
-        return reply(await setBlur(arg))
+      case 'flame':
+        return reply(await setFlame(arg))
       case 'demo': {
         if (!['working', 'done', 'error', 'intro'].includes(arg)) return reply(`Usage: /${NAME} demo working|done|error|intro`)
         // A demo "working" has no turn to end it, so stop it after a few seconds.

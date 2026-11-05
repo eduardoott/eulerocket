@@ -13,7 +13,7 @@ The five ships you can pick with `/eulerocket ship <kind>`.
 
 ![The band while Claude works](docs/img/working.png)
 
-While Claude works the stars warp and the ship recedes; both are adjustable with `recede` and `blur`.
+While Claude works the stars warp and the ship recedes; how far it recedes and how long the flame gets are adjustable with `recede` and `flame`.
 
 ## Install
 
@@ -42,7 +42,7 @@ closes it. Every menu choice is also a command:
 | `/eulerocket colormode <auto\|full\|256>` | 256 for terminals without true colour |
 | `/eulerocket animate <on\|off>` | hold the scene still |
 | `/eulerocket recede <0\|30\|45\|60\|75>` | how far the ship recedes while Claude works, in percent of its size (default 60, ship at 40%; 0 turns it off) |
-| `/eulerocket blur <0\|25\|50\|75\|100>` | how soft the ship gets when it shrinks: 100 smooth, 0 crisp pixels (default 25) |
+| `/eulerocket flame <0\|50\|100\|150\|200\|300>` | how long the flame stretches while Claude works, in percent (default 100; 0 keeps the idle flame) |
 | `/eulerocket ship <kind>` | which ship flies: `rocket` (classic rocket marked EULER), `shuttle` (space shuttle), `retro` (1950s retro rocket), `staged` (multi-stage rocket with escape tower) or `scifi` (starship with blinking lights, default); the large detailed versions show when the band is 8 rows or more |
 | `/eulerocket demo <working\|done\|error\|intro>` | play an effect |
 
