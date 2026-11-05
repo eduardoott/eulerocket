@@ -43,7 +43,7 @@ interface Config { rows: number; enabled: boolean; animate: boolean; whileWorkin
   /** Pixels per character, per terminal app: the right choice depends on that terminal's font. */
   pixelsFor: Record<string, Pixels> }
 
-const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'scifi', recede: 30, blur: 100, slimRows: 4, pixelsFor: {} }
+const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'scifi', recede: 60, blur: 25, slimRows: 4, pixelsFor: {} }
 const NAME = 'eulerocket'
 /** Menu choices for how far the ship recedes while working, in percent. */
 const RECEDES = [0, 30, 45, 60, 75]
