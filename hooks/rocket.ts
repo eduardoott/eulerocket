@@ -8,50 +8,21 @@
  * (working) and `flash`: ms since a turn finished, or null.
  */
 import { hash } from './effects'
+import {
+  type Rgb, type Ship, type ShipDrawer, type ShipTier, Canvas, Sprite, lerp, smooth, clamp01, letter,
+  HULL, HULL_LIT, HULL_DARK, TRIM, TRIM_LIT, TRIM_DARK, INK, STEEL, FLAME, FLAME_GLOW, TILE, TILE_LIT, WINDOW, WING, BELL,
+} from './ship-kit'
+import { retroSprite } from './ships/retro'
+import { stagedSprite } from './ships/staged'
+import { scifiSprite } from './ships/scifi'
+
+export type { Ship, ShipDrawer, ShipTier } from './ship-kit'
 
 export interface SceneInput { t: number; energy: number; flash: number | null }
 export type Renderer = (input: SceneInput) => Uint32Array
 
 /** How long the finish flourish lasts, in ms. */
 export const FLASH_MS = 900
-
-type Rgb = readonly [number, number, number]
-
-class Canvas {
-  readonly buf: Float32Array
-  constructor(readonly w: number, readonly h: number) { this.buf = new Float32Array(w * h * 3) }
-  set(x: number, y: number, c: Rgb) {
-    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return
-    const o = (y * this.w + x) * 3
-    this.buf[o] = c[0]; this.buf[o + 1] = c[1]; this.buf[o + 2] = c[2]
-  }
-  /** Blend toward `c` by `k`. */
-  mix(x: number, y: number, c: Rgb, k: number) {
-    if (x < 0 || y < 0 || x >= this.w || y >= this.h || k <= 0) return
-    if (k > 1) k = 1
-    const o = (y * this.w + x) * 3
-    this.buf[o] += (c[0] - this.buf[o]) * k
-    this.buf[o + 1] += (c[1] - this.buf[o + 1]) * k
-    this.buf[o + 2] += (c[2] - this.buf[o + 2]) * k
-  }
-  get(x: number, y: number): Rgb {
-    x = Math.min(this.w - 1, Math.max(0, x)); y = Math.min(this.h - 1, Math.max(0, y))
-    const o = (y * this.w + x) * 3
-    return [this.buf[o], this.buf[o + 1], this.buf[o + 2]]
-  }
-  pack(): Uint32Array {
-    const out = new Uint32Array(this.w * this.h)
-    const c = (v: number) => (v <= 0 ? 0 : v >= 255 ? 255 : Math.round(v))
-    for (let i = 0; i < out.length; i++) {
-      out[i] = ((c(this.buf[i * 3]) << 16) | (c(this.buf[i * 3 + 1]) << 8) | c(this.buf[i * 3 + 2])) >>> 0
-    }
-    return out
-  }
-}
-
-const lerp = (a: Rgb, b: Rgb, k: number): Rgb => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]
-const smooth = (k: number) => k * k * (3 - 2 * k)
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 
 /** Smooth value noise in [0, 1). */
 function noise(x: number, y: number, seed: number): number {
@@ -118,48 +89,22 @@ export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket'): Ren
   }
 }
 
-const GLYPHS: Record<string, readonly string[]> = {
-  E: ['###', '##.', '#..', '###'],
-  U: ['#.#', '#.#', '#.#', '###'],
-  L: ['#..', '#..', '#..', '###'],
-  R: ['##.', '#.#', '##.', '#.#'],
-}
-const HULL: Rgb = [222, 226, 236], HULL_LIT: Rgb = [250, 251, 255], HULL_DARK: Rgb = [120, 124, 150]
-const TRIM: Rgb = [92, 44, 156], TRIM_LIT: Rgb = [138, 88, 206], TRIM_DARK: Rgb = [52, 22, 96], INK: Rgb = [40, 18, 84]
-const STEEL: Rgb = [84, 88, 104]
-const FLAME: Rgb[] = [[255, 255, 255], [170, 225, 255], [90, 160, 255], [60, 90, 230]]
-const FLAME_GLOW: Rgb = [120, 180, 255]
+/** Which ships can fly, in menu order; another design is another entry here and in SHIPS. */
+export const SHIP_KINDS = ['rocket', 'shuttle', 'retro', 'staged', 'scifi'] as const
+export type ShipKind = (typeof SHIP_KINDS)[number]
 
-/** Which ship flies. Another design is another entry in SHIPS. */
-export type ShipKind = 'rocket' | 'shuttle'
-
-/**
- * A ship drawn at native size: RGB and alpha per pixel, flying right. `anchorY` is the sprite row
- * that sits on the scene's centre row; the flame fills rows `hullTop..hullBot` (relative to that
- * row) and leaves from the left of column `nozzleX`, one flame per entry of `nozzles` (rows
- * `top..bot` relative to the centre row).
- */
-export interface Ship {
-  w: number; h: number
-  px: Float32Array; alpha: Float32Array
-  anchorY: number; hullTop: number; hullBot: number; nozzleX: number
-  nozzles: { top: number; bot: number }[]
+export const SHIP_LABELS: Record<ShipKind, string> = {
+  rocket: 'Classic rocket', shuttle: 'Space shuttle', retro: 'Retro rocket', staged: 'Staged rocket', scifi: 'Starship',
 }
 
-type ShipDrawer = (lettered: boolean, t: number) => Ship
-
-class Sprite extends Canvas {
-  readonly alpha: Float32Array
-  constructor(w: number, h: number) { super(w, h); this.alpha = new Float32Array(w * h) }
-  set(x: number, y: number, col: Rgb) {
-    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return
-    super.set(x, y, col)
-    this.alpha[y * this.w + x] = 1
-  }
+/** The size tier for a scene `h` pixels tall (the full scene, not the visible slice). */
+export function shipTier(h: number): ShipTier {
+  return h >= 16 ? 'large' : h >= 8 ? 'medium' : 'small'
 }
 
 /** The EULER rocket: nozzle, swept fins, a hull with a purple band, a rounded nose, the lettering. */
-function rocketSprite(lettered: boolean): Ship {
+function rocketSprite(tier: ShipTier): Ship {
+  const lettered = tier !== 'small' // 'large' draws like 'medium' for now
   // hull rows relative to the centre row: a one-pixel rim round four rows of lettering, or a plain three-row hull
   const top = lettered ? -3 : -1, bot = lettered ? 2 : 1
   const mid = (top + bot) / 2, hf = (bot - top) / 2
@@ -195,25 +140,16 @@ function rocketSprite(lettered: boolean): Ship {
     for (let dy = top; dy <= bot; dy++) if (Math.abs(dy - mid) <= reach) rows.push(dy)
     rows.forEach((dy, i) => s.set(bx + bodyLen + k, cy + dy, i === 0 ? TRIM_LIT : i === rows.length - 1 ? TRIM_DARK : TRIM))
   }
-  if (lettered) {
-    let gx = bx + 3
-    for (const ch of 'EULER') {
-      const g = GLYPHS[ch]
-      for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) if (g[r][k] === '#') s.set(gx + k, cy + top + 1 + r, INK)
-      gx += 4
-    }
-  }
+  if (lettered) letter(s, 'EULER', bx + 3, cy + top + 1, INK, false)
   return { w: s.w, h: s.h, px: s.buf, alpha: s.alpha, anchorY: cy, hullTop: top, hullBot: bot, nozzleX: tail, nozzles: [{ top, bot }] }
 }
-
-const TILE: Rgb = [38, 40, 50], TILE_LIT: Rgb = [60, 62, 74], WINDOW: Rgb = [30, 40, 72], WING: Rgb = [190, 194, 206]
-const BELL: Rgb = [128, 132, 150]
 
 /**
  * The space shuttle: white on top, black heat-shield tiles underneath, a delta wing, a tall swept
  * tail fin with a purple leading edge, three engines (one when small), a cockpit and the lettering.
  */
-function shuttleSprite(lettered: boolean): Ship {
+function shuttleSprite(tier: ShipTier): Ship {
+  const lettered = tier !== 'small' // 'large' draws like 'medium' for now
   const top = lettered ? -3 : -1, bot = lettered ? 2 : 1
   const mid = (top + bot) / 2
   const nozzleLen = lettered ? 2 : 1, bodyLen = lettered ? 24 : 9
@@ -256,24 +192,19 @@ function shuttleSprite(lettered: boolean): Ship {
     const edge = Math.round(front - (front - back) * (r - 1) / wingRows)
     for (let x = back; x <= edge; x++) s.set(x, cy + bot + r, r === wingRows && lettered ? TILE_LIT : x === edge ? HULL_LIT : WING)
   }
-  if (lettered) {
-    let gx = bx + 1
-    for (const ch of 'EULER') {
-      const g = GLYPHS[ch]
-      for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) if (g[r][k] === '#') s.set(gx + k, cy + top + 1 + r, INK)
-      gx += 4
-    }
-  }
+  if (lettered) letter(s, 'EULER', bx + 1, cy + top + 1, INK, false)
   return {
     w: s.w, h: s.h, px: s.buf, alpha: s.alpha, anchorY: cy, hullTop: top, hullBot: bot, nozzleX: 0,
     nozzles: jets.map((dy) => ({ top: dy, bot: dy })),
   }
 }
 
-const SHIPS: Record<ShipKind, ShipDrawer> = { rocket: rocketSprite, shuttle: shuttleSprite }
+const SHIPS: Record<ShipKind, ShipDrawer> = {
+  rocket: rocketSprite, shuttle: shuttleSprite, retro: retroSprite, staged: stagedSprite, scifi: scifiSprite,
+}
 
-export function drawShip(kind: ShipKind, lettered: boolean, t: number): Ship {
-  return SHIPS[kind](lettered, t)
+export function drawShip(kind: ShipKind, tier: ShipTier, t: number): Ship {
+  return SHIPS[kind](tier, t)
 }
 
 /** The ship's current width in pixels, kept between frames so the scale only moves in whole steps. */
@@ -329,11 +260,12 @@ const GLOW: Rgb = [210, 225, 255], WHITE: Rgb = [255, 255, 255]
  */
 function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind: ShipKind = 'rocket') {
   const { w, h } = c
-  const ship = drawShip(kind, h >= 8, t)
+  const ship = drawShip(kind, shipTier(h), t)
   const { hullTop: top, hullBot: bot } = ship
   const mid = (top + bot) / 2, hf = (bot - top) / 2
   const cy = Math.round(h * 0.5 + Math.sin(t / 900) * 0.6 + (warp > 0.5 ? Math.sin(t / 37) * 0.4 : 0))
-  const left = Math.round(w * 0.74 - (ship.w - 1) / 2 + warp * w * 0.05)
+  // the shrink pivots on the nose, so the right edge is left + ship.w - 1 at any scale; keep it 2 px in
+  const left = Math.min(Math.round(w * 0.74 - (ship.w - 1) / 2 + warp * w * 0.05), w - 3 - (ship.w - 1))
   // whole-pixel width steps with a dead band, so a settled warp never flips between two sizes
   const want = (1 - 0.3 * warp) * ship.w
   if (zoom.width < 1 || zoom.width > ship.w || Math.abs(want - zoom.width) > 0.6) zoom.width = Math.min(ship.w, Math.max(1, Math.round(want)))

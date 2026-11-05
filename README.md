@@ -16,9 +16,13 @@ Then run `/reload-plugins` in Claude Code.
 
 ## Commands
 
+Type `/eulerocket` to open the menu. In the terminal, press ctrl+x then tab to move into it; Esc
+closes it. Every menu choice is also a command:
+
 | Command | What it does |
 |---|---|
-| `/eulerocket` | status and the list of commands |
+| `/eulerocket` | opens the menu: pick the ship, show or hide, size, the band while working and idle, animation and pixels, with no arguments to type |
+| `/eulerocket status` / `help` | the current settings and the list of commands |
 | `/eulerocket on` / `off` | show or hide the rocket |
 | `/eulerocket size <rows\|auto>` | band height, 2 to 24 rows |
 | `/eulerocket working <slim\|full\|hide>` | the band while Claude works |
@@ -26,7 +30,7 @@ Then run `/reload-plugins` in Claude Code.
 | `/eulerocket pixels <standard\|fine>` | fine: four pixels per character, for tight line spacing |
 | `/eulerocket colormode <auto\|full\|256>` | 256 for terminals without true colour |
 | `/eulerocket animate <on\|off>` | hold the scene still |
-| `/eulerocket ship <rocket\|shuttle>` | which ship flies: the EULER rocket (default) or a space shuttle |
+| `/eulerocket ship <kind>` | which ship flies: `rocket` (classic rocket marked EULER, default), `shuttle` (space shuttle), `retro` (1950s retro rocket), `staged` (multi-stage rocket with escape tower) or `scifi` (starship with blinking lights); the large detailed versions show when the band is 8 rows or more |
 | `/eulerocket demo <working\|done\|error\|intro>` | play an effect |
 
 ## Credits
