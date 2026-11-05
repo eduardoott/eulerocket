@@ -38,10 +38,12 @@ interface Config { rows: number; enabled: boolean; animate: boolean; whileWorkin
   recede: number
   /** How soft the shrunken ship gets, in percent: 100 fully averaged, 0 crisp pixels. */
   blur: number
+  /** How tall the band gets in 'slim' mode, in rows: out of the way, still animating. */
+  slimRows: number
   /** Pixels per character, per terminal app: the right choice depends on that terminal's font. */
   pixelsFor: Record<string, Pixels> }
 
-const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'scifi', recede: 30, blur: 100, pixelsFor: {} }
+const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'scifi', recede: 30, blur: 100, slimRows: 4, pixelsFor: {} }
 const NAME = 'eulerocket'
 /** Menu choices for how far the ship recedes while working, in percent. */
 const RECEDES = [0, 30, 45, 60, 75]
@@ -49,10 +51,9 @@ const RECEDES = [0, 30, 45, 60, 75]
 const BLURS = [0, 25, 50, 75, 100]
 const MENU = 'eulerocket'
 const SHIPS_TEXT = SHIP_KINDS.join('|')
-const SIZE_CHOICES = ['auto', '4', '6', '8', '10', '12', '16']
+const SIZE_CHOICES = ['auto', '4', '6', '8', '10', '12', '14', '16']
+const SLIM_CHOICES = [2, 3, 4, 5, 6, 8]
 const isShip = (v: unknown): v is ShipKind => (SHIP_KINDS as readonly unknown[]).includes(v)
-/** How tall the band gets while Claude works, in 'slim' mode: out of the way, still animating. */
-const SLIM_ROWS = 4
 const ROW_STEP = 2
 const MAX_COLS = 250
 /** Upper bound on cells per drawing, so a huge terminal can't produce an unreasonably big frame. */
@@ -115,7 +116,7 @@ export const register: Register = (on) => {
     if (!limits) return 0
     const full = fullRows()
     const mode = working ? config.whileWorking : config.whileIdle
-    return mode === 'full' ? full : mode === 'hide' ? 0 : Math.min(SLIM_ROWS, full)
+    return mode === 'full' ? full : mode === 'hide' ? 0 : Math.min(config.slimRows, full)
   }
 
   /**
@@ -213,6 +214,13 @@ export const register: Register = (on) => {
     return `${config.rows} rows tall, as much as the terminal allows.`
   }
 
+  async function setSlim(arg: string): Promise<string> {
+    const n = Number(arg)
+    if (!arg || !Number.isFinite(n)) return `Usage: /${NAME} slim <rows> (1 to 12).`
+    config.slimRows = clampInt(n, 1, 12); await save()
+    return `slim band: ${config.slimRows} rows.`
+  }
+
   async function setPixels(arg: string): Promise<string> {
     if (!['standard', 'fine'].includes(arg)) return `Usage: /${NAME} pixels standard|fine`
     config.pixelsFor = { ...(config.pixelsFor ?? {}), [terminal]: arg as Pixels }; await save()
@@ -253,7 +261,7 @@ export const register: Register = (on) => {
 
   function statusText(): string {
     const status = `${LABEL}: ${config.enabled ? 'on' : 'off'}, ${config.rows ? `${config.rows} rows` : 'auto height'}, working ${config.whileWorking}, idle ${config.whileIdle}, ship ${config.ship}${use256() ? ', 256 colours' : ''}`
-    return `${status}.\n/${NAME} opens the menu · on · off · size <rows|auto> · working <slim|full|hide> · idle <full|slim|hide> · pixels <standard|fine> · colormode <auto|full|256> · animate <on|off> · recede <${RECEDES.join('|')}> · blur <${BLURS.join('|')}> · ship <${SHIPS_TEXT}> · demo <working|done|error|intro> · status · help`
+    return `${status}.\n/${NAME} opens the menu · on · off · size <rows|auto> · slim <rows> · working <slim|full|hide> · idle <full|slim|hide> · pixels <standard|fine> · colormode <auto|full|256> · animate <on|off> · recede <${RECEDES.join('|')}> · blur <${BLURS.join('|')}> · ship <${SHIPS_TEXT}> · demo <working|done|error|intro> · status · help`
   }
 
   async function openMenu() {
@@ -298,12 +306,13 @@ export const register: Register = (on) => {
     if (!isShip(config.ship)) config.ship = DEFAULTS.ship
     if (!(config.recede >= 0 && config.recede <= 90)) config.recede = DEFAULTS.recede
     if (!(config.blur >= 0 && config.blur <= 100)) config.blur = DEFAULTS.blur
+    if (!(config.slimRows >= 1 && config.slimRows <= 12)) config.slimRows = DEFAULTS.slimRows
     redraw()
     setMood('intro')
     await $.command.register({
       name: NAME,
       description: 'The EULER rocket above your prompt: no argument opens a menu; or on, off, size, working, idle, pixels, colormode, animate, ship, demo, status, help',
-      argumentHint: `[on | off | size <rows|auto> | working <slim|full|hide> | idle <full|slim|hide> | ship <${SHIPS_TEXT}> | recede <percent> | blur <percent> | demo <mood> | status | help]`,
+      argumentHint: `[on | off | size <rows|auto> | slim <rows> | working <slim|full|hide> | idle <full|slim|hide> | ship <${SHIPS_TEXT}> | recede <percent> | blur <percent> | demo <mood> | status | help]`,
     })
     return next(e)
   })
@@ -396,9 +405,14 @@ export const register: Register = (on) => {
         onSelect: (v: string) => act(() => setEnabled(v === 'on'))(),
       }),
       select({
-        key: 'size', label: 'Size          ', value: size,
+        key: 'size', label: 'Full size     ', value: size,
         options: sizes.map((v) => ({ value: v, label: v === 'auto' ? 'auto' : `${v} rows` })),
         onSelect: (v: string) => act(() => setSize(v))(),
+      }),
+      select({
+        key: 'slim', label: 'Slim size     ', value: String(config.slimRows),
+        options: [...new Set([...SLIM_CHOICES, config.slimRows])].map((v) => ({ value: String(v), label: `${v} rows` })),
+        onSelect: (v: string) => act(() => setSlim(v))(),
       }),
       select({
         key: 'working', label: 'While working ', value: config.whileWorking,
@@ -448,6 +462,8 @@ export const register: Register = (on) => {
       case 'on':
       case 'off':
         return reply(await setEnabled(sub.toLowerCase() === 'on'))
+      case 'slim':
+        return reply(await setSlim(arg))
       case 'size':
         return reply(await setSize(arg))
       case 'working':

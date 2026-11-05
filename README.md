@@ -25,6 +25,7 @@ closes it. Every menu choice is also a command:
 | `/eulerocket status` / `help` | the current settings and the list of commands |
 | `/eulerocket on` / `off` | show or hide the rocket |
 | `/eulerocket size <rows\|auto>` | band height, 2 to 24 rows |
+| `/eulerocket slim <rows>` | band height in slim mode, 1 to 12 rows (default 4) |
 | `/eulerocket working <slim\|full\|hide>` | the band while Claude works |
 | `/eulerocket idle <full\|slim\|hide>` | the band while Claude is idle |
 | `/eulerocket pixels <standard\|fine>` | fine: four pixels per character, for tight line spacing |
