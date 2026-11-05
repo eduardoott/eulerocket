@@ -34,11 +34,15 @@ type ColorMode = 'auto' | 'full' | '256'
 type Pixels = 'standard' | 'fine'
 /** `rows` 0 means auto: about a quarter of the terminal. */
 interface Config { rows: number; enabled: boolean; animate: boolean; whileWorking: Shown; whileIdle: Shown; colorMode: ColorMode; ship: ShipKind
+  /** How far the ship recedes while working, in percent of its size. */
+  recede: number
   /** Pixels per character, per terminal app: the right choice depends on that terminal's font. */
   pixelsFor: Record<string, Pixels> }
 
-const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'scifi', pixelsFor: {} }
+const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'scifi', recede: 30, pixelsFor: {} }
 const NAME = 'eulerocket'
+/** Menu choices for how far the ship recedes while working, in percent. */
+const RECEDES = [0, 30, 45, 60, 75]
 const MENU = 'eulerocket'
 const SHIPS_TEXT = SHIP_KINDS.join('|')
 const SIZE_CHOICES = ['auto', '4', '6', '8', '10', '12', '16']
@@ -118,8 +122,8 @@ export const register: Register = (on) => {
     if (!band) return null
     const w = pixelCols(band.columns, pixelsNow()), h = band.rows * 2
     const fullH = Math.max(h, fullRows() * 2)
-    const rkey = `${w}x${fullH}:${config.ship}`
-    if (!renderer || rendererKey !== rkey) { renderer = eulerocket(w, fullH, config.ship); rendererKey = rkey }
+    const rkey = `${w}x${fullH}:${config.ship}:${config.recede}`
+    if (!renderer || rendererKey !== rkey) { renderer = eulerocket(w, fullH, config.ship, config.recede / 100); rendererKey = rkey }
     const flash = mood === 'done' ? ticks * FRAME_MS : null
     const whole = renderer({ t: sceneT, energy, flash })
     const top = Math.max(0, Math.round((fullH - h) / 2))
@@ -223,6 +227,13 @@ export const register: Register = (on) => {
     return config.animate ? 'moving.' : 'holding still.'
   }
 
+  async function setRecede(arg: string): Promise<string> {
+    const n = Number(arg)
+    if (!RECEDES.includes(n)) return `Usage: /${NAME} recede ${RECEDES.join('|')}`
+    config.recede = n; await save()
+    return n === 0 ? 'the ship holds its size while working.' : `the ship recedes to ${100 - n}% while working.`
+  }
+
   async function setShip(arg: string): Promise<string> {
     if (!isShip(arg)) return `Usage: /${NAME} ship ${SHIPS_TEXT}`
     config.ship = arg; await save()
@@ -231,7 +242,7 @@ export const register: Register = (on) => {
 
   function statusText(): string {
     const status = `${LABEL}: ${config.enabled ? 'on' : 'off'}, ${config.rows ? `${config.rows} rows` : 'auto height'}, working ${config.whileWorking}, idle ${config.whileIdle}, ship ${config.ship}${use256() ? ', 256 colours' : ''}`
-    return `${status}.\n/${NAME} opens the menu · on · off · size <rows|auto> · working <slim|full|hide> · idle <full|slim|hide> · pixels <standard|fine> · colormode <auto|full|256> · animate <on|off> · ship <${SHIPS_TEXT}> · demo <working|done|error|intro> · status · help`
+    return `${status}.\n/${NAME} opens the menu · on · off · size <rows|auto> · working <slim|full|hide> · idle <full|slim|hide> · pixels <standard|fine> · colormode <auto|full|256> · animate <on|off> · recede <${RECEDES.join('|')}> · ship <${SHIPS_TEXT}> · demo <working|done|error|intro> · status · help`
   }
 
   async function openMenu() {
@@ -274,12 +285,13 @@ export const register: Register = (on) => {
     config = { ...DEFAULTS, ...(c ?? {}) }
     // a stored ship this version doesn't draw would leave the renderer with no sprite
     if (!isShip(config.ship)) config.ship = DEFAULTS.ship
+    if (!(config.recede >= 0 && config.recede <= 90)) config.recede = DEFAULTS.recede
     redraw()
     setMood('intro')
     await $.command.register({
       name: NAME,
       description: 'The EULER rocket above your prompt: no argument opens a menu; or on, off, size, working, idle, pixels, colormode, animate, ship, demo, status, help',
-      argumentHint: `[on | off | size <rows|auto> | working <slim|full|hide> | idle <full|slim|hide> | ship <${SHIPS_TEXT}> | demo <mood> | status | help]`,
+      argumentHint: `[on | off | size <rows|auto> | working <slim|full|hide> | idle <full|slim|hide> | ship <${SHIPS_TEXT}> | recede <percent> | demo <mood> | status | help]`,
     })
     return next(e)
   })
@@ -387,6 +399,11 @@ export const register: Register = (on) => {
         onSelect: (v: string) => act(() => setShown('whileIdle', v))(),
       }),
       select({
+        key: 'recede', label: 'Recede        ', value: String(config.recede),
+        options: [...new Set([...RECEDES, config.recede])].map((v) => ({ value: String(v), label: v === 0 ? 'off' : `to ${100 - v}%` })),
+        onSelect: (v: string) => act(() => setRecede(v))(),
+      }),
+      select({
         key: 'animate', label: 'Animate       ', value: config.animate ? 'on' : 'off',
         options: [{ value: 'on' }, { value: 'off' }],
         onSelect: (v: string) => act(() => setAnimate(v))(),
@@ -429,6 +446,8 @@ export const register: Register = (on) => {
         return reply(await setAnimate(arg))
       case 'ship':
         return reply(await setShip(arg))
+      case 'recede':
+        return reply(await setRecede(arg))
       case 'demo': {
         if (!['working', 'done', 'error', 'intro'].includes(arg)) return reply(`Usage: /${NAME} demo working|done|error|intro`)
         // A demo "working" has no turn to end it, so stop it after a few seconds.

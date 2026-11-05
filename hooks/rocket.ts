@@ -36,7 +36,7 @@ function noise(x: number, y: number, seed: number): number {
 /** A finished-turn pulse: 1 right at the finish, fading to 0 over FLASH_MS. */
 const pulse = (flash: number | null) => (flash === null || flash >= FLASH_MS ? 0 : (1 - flash / FLASH_MS) ** 2)
 
-export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket'): Renderer {
+export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket', recede = 0.3): Renderer {
   const layers = [
     { density: 0.03, speed: 1.2, bright: 0.45 },
     { density: 0.014, speed: 3.5, bright: 0.75 },
@@ -84,7 +84,7 @@ export function eulerocket(w: number, h: number, kind: ShipKind = 'rocket'): Ren
         for (let k = 0; k < 5; k++) c.mix(Math.floor(sx - k), Math.floor(sy - k * 0.5), [255, 255, 255], 0.9 - k * 0.18)
       }
     }
-    rocket(c, t, warp, pulse(flash), zoom, kind)
+    rocket(c, t, warp, pulse(flash), zoom, kind, recede)
     return c.pack()
   }
 }
@@ -254,11 +254,11 @@ function composite(c: Canvas, ship: Ship, x0: number, y0: number, s: number, cov
 const GLOW: Rgb = [210, 225, 255], WHITE: Rgb = [255, 255, 255]
 
 /**
- * A ship flying right, a little past the middle. While working it edges forward, recedes to ~70%
- * of its size and its blue flame stretches; a finish makes the ship glow and adds a burst to the
+ * A ship flying right, a little past the middle. While working it edges forward, recedes (by `recede`,
+ * a fraction of its size) and its blue flame stretches; a finish makes the ship glow and adds a burst to the
  * flame. Tall bands get the lettering.
  */
-function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind: ShipKind = 'rocket') {
+function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind: ShipKind = 'rocket', recede = 0.3) {
   const { w, h } = c
   const ship = drawShip(kind, shipTier(h), t)
   const { hullTop: top, hullBot: bot } = ship
@@ -267,7 +267,7 @@ function rocket(c: Canvas, t: number, warp: number, f: number, zoom: Zoom, kind:
   // the shrink pivots on the nose, so the right edge is left + ship.w - 1 at any scale; keep it 2 px in
   const left = Math.min(Math.round(w * 0.74 - (ship.w - 1) / 2 + warp * w * 0.05), w - 3 - (ship.w - 1))
   // whole-pixel width steps with a dead band, so a settled warp never flips between two sizes
-  const want = (1 - 0.3 * warp) * ship.w
+  const want = (1 - recede * warp) * ship.w
   if (zoom.width < 1 || zoom.width > ship.w || Math.abs(want - zoom.width) > 0.6) zoom.width = Math.min(ship.w, Math.max(1, Math.round(want)))
   const s = zoom.width / ship.w
   // shrink about the nose and the hull's vertical centre
