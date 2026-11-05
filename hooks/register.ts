@@ -37,7 +37,7 @@ interface Config { rows: number; enabled: boolean; animate: boolean; whileWorkin
   /** Pixels per character, per terminal app: the right choice depends on that terminal's font. */
   pixelsFor: Record<string, Pixels> }
 
-const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: SHIP_KINDS[0], pixelsFor: {} }
+const DEFAULTS: Config = { rows: 0, enabled: true, animate: true, whileWorking: 'slim', whileIdle: 'full', colorMode: 'auto', ship: 'scifi', pixelsFor: {} }
 const NAME = 'eulerocket'
 const MENU = 'eulerocket'
 const SHIPS_TEXT = SHIP_KINDS.join('|')
