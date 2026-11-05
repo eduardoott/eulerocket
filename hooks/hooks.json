@@ -1,0 +1,5 @@
+{
+  "description": "eulerocket: /eulerocket and the EULER rocket band above the prompt, warping while Claude works",
+  "modules": ["./register.ts"],
+  "hooks": {}
+}

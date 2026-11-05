@@ -1,0 +1,12 @@
+{
+  "name": "eulerocket",
+  "description": "The EULER rocket above the Claude Code prompt",
+  "owner": { "name": "Eduardo Ott" },
+  "plugins": [
+    {
+      "name": "eulerocket",
+      "source": "./",
+      "description": "A pixel-art rocket marked EULER above the prompt, warping while Claude works. Zero tokens."
+    }
+  ]
+}

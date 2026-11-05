@@ -1,0 +1,11 @@
+{
+  "name": "eulerocket",
+  "version": "0.1.0",
+  "description": "A rocket marked EULER flying through the stars above your Claude Code prompt. The stars streak into warp while Claude works. Zero tokens.",
+  "author": { "name": "Eduardo Ott" },
+  "homepage": "https://github.com/eduardoott/eulerocket",
+  "repository": "https://github.com/eduardoott/eulerocket",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "keywords": ["mod", "claude-mods", "pixel-art", "terminal", "animation", "function-hooks"]
+}
